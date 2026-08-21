@@ -1,5 +1,32 @@
 # Changelog
 
+## [4.2.0] - 2026-08-21
+
+### 🔒 Security Fixes
+
+- **Fuite possible du mot de passe sudo (critique)** : avec `get_pty=True`, stdout et stderr sont fusionnés en un seul flux — l'ancien filtre ne nettoyait que stderr, donc le password pouvait apparaître en clair dans la sortie combinée (ex : commande qui lit stdin). Désormais :
+  - Le password n'est écrit sur stdin **que lorsqu'un prompt `[sudo] password:` / `Password:` est réellement détecté**. Sur un hôte NOPASSWD, aucun secret n'est transmis (il ne peut plus fuiter dans le stdin de la commande elle-même).
+  - Le password est **masqué (`***`) dans toute la sortie**, y compris l'écho PTY.
+  - Les messages d'exception contenant le password sont également masqués.
+- **Anti-OOM** : les lectures de sortie sont désormais bornées (`_read_bounded`, limite 10 Mo par défaut, configurable via `SSH_MCP_MAX_OUTPUT_BYTES`). Un `cat /dev/urandom` ou un log géant retourne une erreur au lieu d'aspirer la mémoire du serveur MCP.
+
+### 🛡️ Robustesse
+
+- **Écriture atomique de `servers.json`** : tmp + `os.replace` + lock threading — plus de JSON corrompu si le process meurt mid-write.
+
+### ✨ Improvements
+
+- **Portabilité des secrets** : `SecretStore` supporte maintenant un fallback `keyring` (Linux Secret Service / macOS Keychain) quand `win32cred` est absent. Sur une machine sans store disponible, erreur explicite à l'usage au lieu d'un crash à l'import.
+- `ssh_exec_network` : le paramètre `max_total_timeout` est désormais exposé dans le schéma du tool (était codé en dur à 120 s côté handler).
+
+### 🧪 Tests
+
+- Nouveau `tests/test_sudo_security.py` (3 tests) prouvant :
+  - NOPASSWD → password jamais envoyé sur stdin
+  - Prompt détecté → password envoyé une fois, écho PTY masqué
+  - Exception contenant le password → masqué dans stderr
+- Suite complète : **19/19 passent**.
+
 ## [4.1.0] - 2026-08-03
 
 ### 🐛 Critical Fixes
