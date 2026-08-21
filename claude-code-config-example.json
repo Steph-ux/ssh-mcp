@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ssh-mcp": {
+      "command": "python",
+      "args": [
+        "D:\\Steph\\script\\ssh-mcp\\server.py"
+      ],
+      "env": {},
+      "disabled": false
+    }
+  }
+}

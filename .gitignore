@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.claude/
+.opencode/
+
+# Configs locales — ne JAMAIS publier
+servers.json
+backups/
+.env
+
+# OS
+Thumbs.db
+.DS_Store
