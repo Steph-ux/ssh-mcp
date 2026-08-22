@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.2.1] - 2026-08-22
+
+### 🛡️ Client Safety & MCP Protocol Compliance
+
+- **Validation des retours MCP (`TextContent`)** : `call_tool` garantit désormais que le texte renvoyé est toujours une chaîne de caractères non-nulle (`str`), évitant les exceptions côté client (`undefined is not an object` / `output.slice` crash).
+- **Protection contre les arguments manquants** : tous les 18 outils vérifient explicitement la présence des arguments requis et retournent un message d'erreur standardisé (`ERREUR : '...' est requis`) au lieu de laisser fuiter des `KeyError`.
+- **Suite de tests MCP** : validation systématique des 18 outils avec arguments vides et `None` (22/22 tests passants).
+
 ## [4.2.0] - 2026-08-21
 
 ### 🔒 Security Fixes

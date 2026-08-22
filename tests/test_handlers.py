@@ -123,3 +123,38 @@ def test_restore_with_confirm_sends_only_clean_lines(isolated, monkeypatch, tmp_
     call("ssh_restore_config", alias="core", backup_file=str(backup), confirm=True)
 
     assert called[0]["commands"] == ["hostname R1", "interface Gi0/0"]
+
+
+# ── MCP Protocol : call_tool safety & robust return types ────────
+
+
+def test_all_18_tools_return_valid_text_content_on_empty_args(isolated):
+    assert len(server.TOOLS) == 18
+    for t in server.TOOLS:
+        res = asyncio.run(server.call_tool(t.name, {}))
+        assert isinstance(res, list), f"{t.name} did not return a list"
+        assert len(res) == 1, f"{t.name} returned list of length {len(res)}"
+        item = res[0]
+        assert item.type == "text", f"{t.name} type is not text"
+        assert isinstance(item.text, str), f"{t.name} text is not str: {type(item.text)}"
+        assert len(item.text) > 0, f"{t.name} text is empty"
+
+
+def test_all_18_tools_return_valid_text_content_on_none_args(isolated):
+    for t in server.TOOLS:
+        res = asyncio.run(server.call_tool(t.name, None))
+        assert isinstance(res, list)
+        assert len(res) == 1
+        item = res[0]
+        assert item.type == "text"
+        assert isinstance(item.text, str)
+        assert len(item.text) > 0
+
+
+def test_unknown_tool_returns_clean_error_text_content():
+    res = asyncio.run(server.call_tool("invalid_tool_name", {}))
+    assert isinstance(res, list)
+    assert len(res) == 1
+    assert res[0].type == "text"
+    assert "ERREUR" in res[0].text
+

@@ -1,5 +1,5 @@
 """
-SSH MCP Server v4.1 — Full NetOps Assistant
+SSH MCP Server v4.2.1 — Full NetOps Assistant
 =============================================
 Supporte : Linux/Unix, Cisco IOS/IOS-XE/XR, MikroTik RouterOS,
            FortiGate FortiOS, Juniper JunOS + tout device SSH générique.
@@ -374,7 +374,9 @@ async def handle(name: str, args: dict) -> str:
     # ── Connexions ───────────────────────────────────────────────
 
     if name == "ssh_connect":
-        alias = args["alias"]
+        alias = args.get("alias")
+        if not alias:
+            return "ERREUR : 'alias' est requis"
         servers = load_servers()
         saved_cfg = servers.get(alias)
 
@@ -442,9 +444,12 @@ async def handle(name: str, args: dict) -> str:
             return f"ERREUR Connexion [{alias}] : {err}{hint}"
 
     elif name == "ssh_disconnect":
+        alias = args.get("alias")
+        if not alias:
+            return "ERREUR : 'alias' est requis"
         try:
-            await pool.disconnect(args["alias"])
-            return f"[{args['alias']}] déconnecté"
+            await pool.disconnect(alias)
+            return f"[{alias}] déconnecté"
         except Exception as e: return f"ERREUR {e}"
 
     elif name == "ssh_list":
@@ -469,7 +474,9 @@ async def handle(name: str, args: dict) -> str:
     # ── Config persistante ───────────────────────────────────────
 
     elif name == "ssh_save_server":
-        alias    = args["alias"]
+        alias = args.get("alias")
+        if not alias:
+            return "ERREUR : 'alias' est requis"
         servers  = load_servers()
         is_update = alias in servers
         previous = servers.get(alias, {})
@@ -512,7 +519,9 @@ async def handle(name: str, args: dict) -> str:
         )
 
     elif name == "ssh_remove_server":
-        alias   = args["alias"]
+        alias = args.get("alias")
+        if not alias:
+            return "ERREUR : 'alias' est requis"
         servers = load_servers()
         if alias not in servers:
             return f"[{alias}] introuvable\nServeurs : {list(servers.keys()) or '(aucun)'}"
@@ -544,13 +553,16 @@ async def handle(name: str, args: dict) -> str:
     # ── Exec Linux ───────────────────────────────────────────────
 
     elif name == "ssh_exec":
-        alias = args["alias"]
+        alias = args.get("alias")
+        command = args.get("command")
+        if not alias or not command:
+            return "ERREUR : 'alias' et 'command' sont requis"
         try:
-            r    = await pool.exec(alias, args["command"],
+            r    = await pool.exec(alias, command,
                                    timeout=int(args.get("timeout",30)),
                                    get_pty=bool(args.get("pty",False)))
             icon = "OK" if r["exit_code"] == 0 else "ERR"
-            lines = [f"{icon} [{alias}] $ {args['command']}  |  exit={r['exit_code']}  |  {r['elapsed']}s"]
+            lines = [f"{icon} [{alias}] $ {command}  |  exit={r['exit_code']}  |  {r['elapsed']}s"]
             if r["stdout"].rstrip(): lines.append(r["stdout"].rstrip())
             if r["stderr"].rstrip() and r["exit_code"] != 0: lines.append(f"[stderr]\n{r['stderr'].rstrip()}")
             return "\n".join(lines)
@@ -558,12 +570,16 @@ async def handle(name: str, args: dict) -> str:
         except Exception as e: return f"ERREUR {e}"
 
     elif name == "ssh_exec_sudo":
-        alias = args["alias"]
+        alias = args.get("alias")
+        command = args.get("command")
+        sudo_password = args.get("sudo_password")
+        if not alias or not command or not sudo_password:
+            return "ERREUR : 'alias', 'command' et 'sudo_password' sont requis"
         try:
-            r    = await pool.exec_sudo(alias, args["command"], args["sudo_password"],
+            r    = await pool.exec_sudo(alias, command, sudo_password,
                                         timeout=int(args.get("timeout",30)))
             icon = "OK" if r["exit_code"] == 0 else "ERR"
-            lines = [f"{icon} [{alias}] sudo {args['command']}  |  exit={r['exit_code']}  |  {r['elapsed']}s"]
+            lines = [f"{icon} [{alias}] sudo {command}  |  exit={r['exit_code']}  |  {r['elapsed']}s"]
             if r["stdout"].rstrip(): lines.append(r["stdout"].rstrip())
             if r["stderr"].rstrip() and r["exit_code"] != 0: lines.append(f"[stderr]\n{r['stderr'].rstrip()}")
             return "\n".join(lines)
@@ -573,11 +589,14 @@ async def handle(name: str, args: dict) -> str:
     # ── Exec Network ─────────────────────────────────────────────
 
     elif name == "ssh_exec_network":
-        alias = args["alias"]
+        alias = args.get("alias")
+        commands = args.get("commands")
+        if not alias or not commands:
+            return "ERREUR : 'alias' et 'commands' sont requis"
         try:
             r = await pool.exec_network(
                 alias           = alias,
-                commands        = args["commands"],
+                commands        = commands,
                 device_type     = args.get("device_type", "generic"),
                 enable_password = args.get("enable_password"),
                 config_mode     = bool(args.get("config_mode", False)),
@@ -598,9 +617,12 @@ async def handle(name: str, args: dict) -> str:
         except Exception as e: return f"ERREUR ssh_exec_network : {e}"
 
     elif name == "ssh_push_config":
-        alias = args["alias"]
+        alias = args.get("alias")
+        config = args.get("config")
+        if not alias or config is None:
+            return "ERREUR : 'alias' et 'config' sont requis"
         try:
-            commands = strip_config_noise(args["config"])
+            commands = strip_config_noise(config)
             if not commands:
                 return "WARN Aucune commande à envoyer (config vide)"
 
@@ -646,7 +668,9 @@ async def handle(name: str, args: dict) -> str:
         except Exception as e: return f"ERREUR ssh_push_config : {e}"
 
     elif name == "ssh_backup_config":
-        alias = args["alias"]
+        alias = args.get("alias")
+        if not alias:
+            return "ERREUR : 'alias' est requis"
         try:
             device_type = args.get("device_type", "generic")
             r = await pool.backup_config(alias, device_type=device_type,
@@ -669,8 +693,10 @@ async def handle(name: str, args: dict) -> str:
         except Exception as e: return f"ERREUR ssh_backup_config : {e}"
 
     elif name == "ssh_restore_config":
-        alias       = args["alias"]
-        backup_file = args["backup_file"]
+        alias       = args.get("alias")
+        backup_file = args.get("backup_file")
+        if not alias or not backup_file:
+            return "ERREUR : 'alias' et 'backup_file' sont requis"
         if not os.path.exists(backup_file):
             return f"ERREUR Fichier introuvable : {backup_file}"
         try:
@@ -716,8 +742,10 @@ async def handle(name: str, args: dict) -> str:
         except Exception as e: return f"ERREUR ssh_restore_config : {e}"
 
     elif name == "ssh_diff_config":
-        alias = args["alias"]
-        file_a = args["backup_file_a"]
+        alias = args.get("alias")
+        file_a = args.get("backup_file_a")
+        if not alias or not file_a:
+            return "ERREUR : 'alias' et 'backup_file_a' sont requis"
         if not os.path.exists(file_a):
             return f"ERREUR Fichier A introuvable : {file_a}"
         with open(file_a, "r", encoding="utf-8") as f:
@@ -760,24 +788,37 @@ async def handle(name: str, args: dict) -> str:
     # ── SFTP ─────────────────────────────────────────────────────
 
     elif name == "ssh_upload":
+        alias = args.get("alias")
+        local_path = args.get("local_path")
+        remote_path = args.get("remote_path")
+        if not alias or not local_path or not remote_path:
+            return "ERREUR : 'alias', 'local_path' et 'remote_path' sont requis"
         try:
-            r = await pool.upload(args["alias"], args["local_path"], args["remote_path"])
-            if r["ok"]: return f"OK Upload [{args['alias']}]\n   {args['local_path']} -> {args['remote_path']}\n   {r['size']//1024} KB"
+            r = await pool.upload(alias, local_path, remote_path)
+            if r["ok"]: return f"OK Upload [{alias}]\n   {local_path} -> {remote_path}\n   {r['size']//1024} KB"
             return f"ERREUR Upload échoué : {r['error']}"
         except Exception as e: return f"ERREUR {e}"
 
     elif name == "ssh_download":
+        alias = args.get("alias")
+        local_path = args.get("local_path")
+        remote_path = args.get("remote_path")
+        if not alias or not local_path or not remote_path:
+            return "ERREUR : 'alias', 'local_path' et 'remote_path' sont requis"
         try:
-            r = await pool.download(args["alias"], args["remote_path"], args["local_path"])
-            if r["ok"]: return f"OK Download [{args['alias']}]\n   {args['remote_path']} -> {args['local_path']}\n   {r['size']//1024} KB"
+            r = await pool.download(alias, remote_path, local_path)
+            if r["ok"]: return f"OK Download [{alias}]\n   {remote_path} -> {local_path}\n   {r['size']//1024} KB"
             return f"ERREUR Download échoué : {r['error']}"
         except Exception as e: return f"ERREUR {e}"
 
     elif name == "ssh_list_remote":
+        alias = args.get("alias")
+        if not alias:
+            return "ERREUR : 'alias' est requis"
         try:
-            items = await pool.list_remote(args["alias"], args.get("path", "."))
-            if not items: return f"[{args['alias']}] {args.get('path','.')} - vide"
-            lines = [f"[{args['alias']}] {args.get('path','.')} ({len(items)} entrée(s)) :"]
+            items = await pool.list_remote(alias, args.get("path", "."))
+            if not items: return f"[{alias}] {args.get('path','.')} - vide"
+            lines = [f"[{alias}] {args.get('path','.')} ({len(items)} entrée(s)) :"]
             for it in items:
                 icon = "[DIR]" if it["type"]=="dir" else "[FILE]"
                 size = f"({it['size']//1024} KB)" if it["type"]=="file" and it["size"]>=1024 else f"({it['size']} B)" if it["type"]=="file" else ""
@@ -788,20 +829,31 @@ async def handle(name: str, args: dict) -> str:
     # ── Tunnels ──────────────────────────────────────────────────
 
     elif name == "ssh_tunnel":
+        alias = args.get("alias")
+        label = args.get("label")
+        local_port = args.get("local_port")
+        remote_host = args.get("remote_host")
+        remote_port = args.get("remote_port")
+        if not (alias and label and local_port and remote_host and remote_port):
+            return "ERREUR : 'alias', 'label', 'local_port', 'remote_host' et 'remote_port' sont requis"
         try:
-            r = await pool.start_tunnel(args["alias"], args["label"],
-                int(args["local_port"]), args["remote_host"], int(args["remote_port"]))
+            r = await pool.start_tunnel(alias, label,
+                int(local_port), remote_host, int(remote_port))
             if r["ok"]:
-                return (f"OK Tunnel [{args['alias']}:{args['label']}]\n"
-                        f"   localhost:{args['local_port']} -> {args['remote_host']}:{args['remote_port']}\n"
-                        f"   -> Ferme avec ssh_close_tunnel(alias='{args['alias']}', label='{args['label']}')")
+                return (f"OK Tunnel [{alias}:{label}]\n"
+                        f"   localhost:{local_port} -> {remote_host}:{remote_port}\n"
+                        f"   -> Ferme avec ssh_close_tunnel(alias='{alias}', label='{label}')")
             return f"ERREUR Tunnel échoué : {r['error']}"
         except Exception as e: return f"ERREUR {e}"
 
     elif name == "ssh_close_tunnel":
+        alias = args.get("alias")
+        label = args.get("label")
+        if not alias or not label:
+            return "ERREUR : 'alias' et 'label' sont requis"
         try:
-            ok = await pool.stop_tunnel(args["alias"], args["label"])
-            return f"OK Tunnel [{args['label']}] fermé" if ok else f"WARN Tunnel [{args['label']}] introuvable"
+            ok = await pool.stop_tunnel(alias, label)
+            return f"OK Tunnel [{label}] fermé" if ok else f"WARN Tunnel [{label}] introuvable"
         except Exception as e: return f"ERREUR {e}"
 
     return f"ERREUR Outil inconnu : {name}"
@@ -848,16 +900,20 @@ server = Server("ssh-mcp")
 async def list_tools() -> list[Tool]: return TOOLS
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+async def call_tool(name: str, arguments: dict | None = None) -> list[TextContent]:
     log.info(f"-> {name}")
     try:
         result = await handle(name, arguments or {})
     except Exception as e:
         result = f"ERREUR Erreur inattendue '{name}' : {e}"
+    if result is None:
+        result = ""
+    elif not isinstance(result, str):
+        result = str(result)
     return [TextContent(type="text", text=result)]
 
 async def main():
-    log.info(f"SSH MCP Server v4.1 | {len(TOOLS)} outils | Paramiko: {'OK' if _SSH_OK else 'ERROR'}")
+    log.info(f"SSH MCP Server v4.2.1 | {len(TOOLS)} outils | Paramiko: {'OK' if _SSH_OK else 'ERROR'}")
     log.info(f"Devices supportes : {', '.join(DEVICE_TYPES)}")
     log.info(f"Backups : {BACKUPS_DIR}")
     # Reference conservee : sans elle la task peut etre collectee par le GC.
