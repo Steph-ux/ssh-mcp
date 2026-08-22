@@ -183,7 +183,7 @@ See [CLAUDE_CODE_USAGE.md](CLAUDE_CODE_USAGE.md) for detailed examples.
 
 ## Installation in MCP Clients (Claude Desktop, OpenCode, Cursor, Windsurf)
 
-### 🚀 Option 1: `uvx` (Instant — No Installation Required)
+### Option 1: uvx (Instant - No Installation Required)
 
 Add directly to your MCP client configuration (`claude_desktop_config.json`, `opencode.json`, etc.):
 
@@ -198,7 +198,7 @@ Add directly to your MCP client configuration (`claude_desktop_config.json`, `op
 }
 ```
 
-### 📦 Option 2: `pip install`
+### Option 2: pip install
 
 ```bash
 pip install git+https://github.com/Steph-ux/ssh-mcp.git
@@ -215,7 +215,7 @@ Then in your MCP config:
 }
 ```
 
-### 💻 Option 3: Local Clone (Development)
+### Option 3: Local Clone (Development)
 
 ```bash
 git clone https://github.com/Steph-ux/ssh-mcp.git

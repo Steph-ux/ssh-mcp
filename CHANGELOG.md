@@ -2,276 +2,128 @@
 
 ## [5.0.0] - 2026-08-22
 
-### ⚡ Unification Architecture (26 ➔ 7 Outils MCP)
+### Unification Architecture (26 to 7 MCP Tools)
 
-- **Regroupement ergonomique & Économie de tokens (-70%)** :
-  - `ssh_session` : Connect, disconnect, pool listing (avec jump hosts, keepalive, zlib compression).
-  - `ssh_server` : Inventaire servers.json (save, remove, list).
-  - `ssh_exec` : Exécution shell unifiée (sync, sudo avec prompt detection, background jobs).
-  - `ssh_job` : Supervision background jobs (status, streaming tail, kill).
-  - `ssh_sftp` : Transferts de fichiers & dossiers (upload, download, upload_dir, download_dir, list).
-  - `ssh_network` : Automatisation NetOps (exec, push config, backup, restore dry-run/confirm, diff).
-  - `ssh_tunnel` : Tunnels port-forwarding et proxy dynamique SOCKS5.
-- **Rétrocompatibilité totale** : Tous les anciens noms d'outils (`ssh_connect`, `ssh_upload`, `ssh_exec_sudo`, etc.) continuent d'être routés de façon transparente.
-- **Suite de tests** : 28/28 tests unitaires passés avec succès.
+- **Ergonomic grouping & Token optimization (-70%)**:
+  - `ssh_session`: Connect, disconnect, pool listing (with jump hosts, keepalive, zlib compression).
+  - `ssh_server`: Inventory servers.json (save, remove, list).
+  - `ssh_exec`: Unified shell execution (sync, sudo with prompt detection, background jobs).
+  - `ssh_job`: Background jobs supervision (status, streaming tail, kill).
+  - `ssh_sftp`: File & directory transfers (upload, download, upload_dir, download_dir, list).
+  - `ssh_network`: NetOps automation (exec, push config, backup, restore dry-run/confirm, diff).
+  - `ssh_tunnel`: TCP port-forwarding tunnels and dynamic SOCKS5 proxy.
+- **Full Backward Compatibility**: All legacy tool names (`ssh_connect`, `ssh_upload`, `ssh_exec_sudo`, etc.) continue to be transparently routed.
+- **Test Suite**: 28/28 unit tests passing.
 
 ## [4.3.0] - 2026-08-22
 
-### 🚀 5 Major Improvements (NetOps & Pentest Architecture)
+### 5 Major Improvements (NetOps & Pentest Architecture)
 
-1. **Transferts récursifs de dossiers (`ssh_upload_dir` / `ssh_download_dir`) & Timeouts SFTP** :
-   - Transfert complet d'arborescences de dossiers via SFTP sans nécessiter de zip manuel préalable.
-   - Timeout paramétrable (`timeout`) sur `ssh_upload`, `ssh_download`, `ssh_upload_dir` et `ssh_download_dir`.
-   - Création récursive transparente des répertoires distants (`mkdir -p` SFTP).
+1. **Recursive directory transfers (`ssh_upload_dir` / `ssh_download_dir`) & SFTP Timeouts**:
+   - Full directory tree transfer over SFTP without requiring manual zip archives.
+   - Configurable `timeout` parameter on `ssh_upload`, `ssh_download`, `ssh_upload_dir` and `ssh_download_dir`.
+   - Transparent recursive remote directory creation (`mkdir -p` SFTP).
 
-2. **Proxy SOCKS5 Dynamique (`ssh_socks` / `ssh_close_socks`)** :
-   - Mini-serveur SOCKS5 RFC 1928 intégré démarré sur `127.0.0.1:local_port`.
-   - Supporte la négociation sans auth, résolution d'adresses IPv4 (`0x01`), noms de domaines (`0x03`) et IPv6 (`0x04`).
-   - Route l'ensemble du trafic d'un outil local (Burp Suite, curl, navigateur, scanner) à travers l'hôte SSH distant via des canaux `direct-tcpip`.
+2. **Dynamic SOCKS5 Proxy (`ssh_socks` / `ssh_close_socks`)**:
+   - Integrated SOCKS5 RFC 1928 server bound to `127.0.0.1:local_port`.
+   - Supports no-auth handshake, address resolution for IPv4 (`0x01`), domain names (`0x03`) and IPv6 (`0x04`).
+   - Routes traffic from local tools (Burp Suite, curl, browser, scanner) through the remote SSH host via `direct-tcpip` channels.
 
-3. **Support natif des Jump Hosts / Bastions (`jump_alias`)** :
-   - Paramètre `jump_alias` dans `ssh_connect` et `servers.json`.
-   - Chaînage transparent via les canaux `direct-tcpip` du transport SSH du bastion actif.
-   - Ordonnancement automatique lors de l'auto-connexion au démarrage (bastions connectés en premier).
+3. **Native Jump Host / Bastion Support (`jump_alias`)**:
+   - `jump_alias` parameter in `ssh_connect` and `servers.json`.
+   - Transparent chaining through active bastion's `direct-tcpip` channels.
+   - Automatic ordering during startup autoconnect (bastions connect first).
 
-4. **Exécution asynchrone / Background Jobs (`ssh_exec_background`, `ssh_job_status`, `ssh_job_tail`, `ssh_job_kill`)** :
-   - Lancement de commandes longues en arrière-plan sans bloquer l'agent ou le client MCP.
-   - Capture en streaming mémoire bornée des flux `stdout` et `stderr`.
-   - Suivi d'état en temps réel, lecture des dernières lignes et arrêt à la demande.
+4. **Asynchronous Background Jobs (`ssh_exec_background`, `ssh_job_status`, `ssh_job_tail`, `ssh_job_kill`)**:
+   - Run long commands in the background without blocking MCP client requests.
+   - Bounded streaming memory capture of `stdout` and `stderr` streams.
+   - Real-time status tracking, log inspection, and kill on demand.
 
-5. **Keepalive & Compression Transport** :
-   - Compression zlib (`compress=True`) activée par défaut pour accélérer les transferts SFTP.
-   - Envoi régulier de paquets keepalive (`keepalive_interval=30`) pour prévenir les déconnexions silencieuses dues aux firewalls ou NAT.
+5. **Keepalive & Transport Compression**:
+   - Zlib compression (`compress=True`) enabled by default to accelerate SFTP transfers.
+   - Periodic keepalive packets (`keepalive_interval=30`) to eliminate silent NAT/firewall drops.
 
-### 🧪 Tests
-- Nouveau `tests/test_new_features.py` couvrant :
-  - Handshake et connexion SOCKS5
-  - Transferts récursifs de répertoires
-  - Cycle de vie des jobs en arrière-plan
-  - Chaînage Jump Host
-  - Options compression & keepalive
-- Suite complète : **27/27 tests réussis**.
+### Tests
+- New `tests/test_new_features.py` covering:
+  - SOCKS5 handshake and connection
+  - Recursive directory transfers
+  - Background job lifecycle
+  - Jump Host chaining
+  - Compression & keepalive options
+- Full suite: 27/27 tests passed.
 
 ## [4.2.1] - 2026-08-22
 
-### 🛡️ Client Safety & MCP Protocol Compliance
+### Client Safety & MCP Protocol Compliance
 
-- **Validation des retours MCP (`TextContent`)** : `call_tool` garantit désormais que le texte renvoyé est toujours une chaîne de caractères non-nulle (`str`), évitant les exceptions côté client (`undefined is not an object` / `output.slice` crash).
-- **Protection contre les arguments manquants** : tous les 18 outils vérifient explicitement la présence des arguments requis et retournent un message d'erreur standardisé (`ERREUR : '...' est requis`) au lieu de laisser fuiter des `KeyError`.
-- **Suite de tests MCP** : validation systématique des 18 outils avec arguments vides et `None` (22/22 tests passants).
+- **MCP Return Validation (`TextContent`)**: `call_tool` guarantees returned text is always a non-null string (`str`), preventing client-side crashes (`undefined is not an object` / `output.slice` crash).
+- **Missing arguments protection**: All tools explicitly validate required arguments and return clean standardized error messages (`ERREUR : '...' est requis`).
+- **MCP Test Suite**: Systematic validation of tools with empty and `None` arguments.
 
 ## [4.2.0] - 2026-08-21
 
-### 🔒 Security Fixes
+### Security Fixes
 
-- **Fuite possible du mot de passe sudo (critique)** : avec `get_pty=True`, stdout et stderr sont fusionnés en un seul flux — l'ancien filtre ne nettoyait que stderr, donc le password pouvait apparaître en clair dans la sortie combinée (ex : commande qui lit stdin). Désormais :
-  - Le password n'est écrit sur stdin **que lorsqu'un prompt `[sudo] password:` / `Password:` est réellement détecté**. Sur un hôte NOPASSWD, aucun secret n'est transmis (il ne peut plus fuiter dans le stdin de la commande elle-même).
-  - Le password est **masqué (`***`) dans toute la sortie**, y compris l'écho PTY.
-  - Les messages d'exception contenant le password sont également masqués.
-- **Anti-OOM** : les lectures de sortie sont désormais bornées (`_read_bounded`, limite 10 Mo par défaut, configurable via `SSH_MCP_MAX_OUTPUT_BYTES`). Un `cat /dev/urandom` ou un log géant retourne une erreur au lieu d'aspirer la mémoire du serveur MCP.
+- **Sudo password leak prevention**: With `get_pty=True`, stdout and stderr are merged into a single stream. Password is now only written when prompt `[sudo] password:` / `Password:` is detected. On NOPASSWD hosts, no secret is transmitted.
+  - Password is masked (`***`) in all output, including PTY echo.
+  - Exception messages containing the password are also sanitized.
+- **Anti-OOM**: Output reads are bounded (`_read_bounded`, default 10MB limit, configurable via `SSH_MCP_MAX_OUTPUT_BYTES`).
 
-### 🛡️ Robustesse
+### Robustness
 
-- **Écriture atomique de `servers.json`** : tmp + `os.replace` + lock threading — plus de JSON corrompu si le process meurt mid-write.
+- **Atomic write for `servers.json`**: tmp + `os.replace` + threading lock prevents JSON corruption.
 
-### ✨ Improvements
+### Improvements
 
-- **Portabilité des secrets** : `SecretStore` supporte maintenant un fallback `keyring` (Linux Secret Service / macOS Keychain) quand `win32cred` est absent. Sur une machine sans store disponible, erreur explicite à l'usage au lieu d'un crash à l'import.
-- `ssh_exec_network` : le paramètre `max_total_timeout` est désormais exposé dans le schéma du tool (était codé en dur à 120 s côté handler).
+- **Secret portability**: `SecretStore` supports `keyring` fallback (Linux Secret Service / macOS Keychain) when `win32cred` is absent.
+- `ssh_exec_network`: `max_total_timeout` exposed in tool schema.
 
-### 🧪 Tests
+### Tests
 
-- Nouveau `tests/test_sudo_security.py` (3 tests) prouvant :
-  - NOPASSWD → password jamais envoyé sur stdin
-  - Prompt détecté → password envoyé une fois, écho PTY masqué
-  - Exception contenant le password → masqué dans stderr
-- Suite complète : **19/19 passent**.
+- New `tests/test_sudo_security.py` (3 tests) validating sudo security.
 
 ## [4.1.0] - 2026-08-03
 
-### 🐛 Critical Fixes
+### Fixes
 
-- **Backups d'équipements réseau corrompus** : `backup_config` renvoyait la sortie brute du shell (en-têtes `[alias] # cmd`, écho de commande, prompt). Ces lignes passaient le filtre de `ssh_restore_config` et étaient **poussées comme commandes de configuration**. La sortie est désormais nettoyée (`clean_device_output`) et le filtrage de restore (`strip_config_noise`) écarte en-têtes, bannières et commentaires.
-- **Pagination `--More--`** : le marqueur était re-détecté indéfiniment dans le buffer cumulé (envoi d'espaces en boucle) et la troncature à `rfind("\n")` supprimait une ligne réelle par page. Le marqueur est maintenant retiré du buffer, avec garde-fou `MAX_PAGES`.
-- **Un timeout annulait tout le batch** : `timeout_s` et `max_timeout_absolu` étaient identiques, donc toute commande lente levait `TimeoutError` et abandonnait les commandes restantes, en laissant le canal SSH ouvert. Timeout d'inactivité et deadline absolue sont désormais distincts, l'erreur est isolée par commande, et `shell.close()` est dans un `finally`.
+- **Network device backups cleaning**: `backup_config` output sanitized (`clean_device_output`) and filtered (`strip_config_noise`).
+- **Pagination `--More--`**: Proper marker removal and page limit guards.
+- **Isolated timeout handling**: Command errors isolated per command with clean socket closure in finally blocks.
 
-### ⚠️ Breaking
+### Breaking
 
-- `ssh_restore_config` est en **dry-run par défaut**. Passer `confirm=true` pour exécuter réellement.
+- `ssh_restore_config` is dry-run by default. Pass `confirm=true` to execute.
 
-### ✨ Improvements
+### Improvements
 
-- `ssh_push_config` : backup automatique avant déploiement (`backup_first`, activé par défaut) servant de point de rollback.
-- `ssh_save_server` : mise à jour partielle — les champs non fournis (`key_path`, `device_type`, `known_hosts_path`…) sont conservés. `host`/`username` ne sont plus requis sur un alias existant.
-- `ssh_connect` : fusion config sauvegardée + arguments explicites. Fournir `host` n'écarte plus les credentials du Credential Manager.
-- SFTP (`upload`/`download`/`list_remote`) : reconnexion automatique comme `exec`.
-- Tunnels : le transport est relu à chaque connexion entrante et survit à une reconnexion.
-- Keepalive SSH à 30s.
-- `ssh_list_servers` reste utilisable sans paramiko et tolère un `servers.json` incomplet.
+- `ssh_push_config`: Automatic pre-deployment backup (`backup_first`, enabled by default).
+- `ssh_save_server`: Partial updates preserve existing fields.
+- `ssh_connect`: Merge saved configuration with explicit arguments.
+- SFTP: Automatic reconnection.
+- Tunnels: Resilient transport handles reconnections.
+- Keepalive set to 30s.
 
 ## [4.0.0] - 2026-05-31
 
-### 🚀 Major Features
+### Major Features
 
-#### Smart Connection Mode
-- **`ssh_connect` now accepts just an alias** to load credentials from `servers.json` automatically
-- No need to provide `host`, `username`, `password` every time
-- Example: `ssh_connect(alias='vps')` instead of providing all parameters
-- Fixes Claude Code integration issues where it couldn't figure out how to use the tool
-
-#### Rate Limiting
-- Added 100ms minimum interval between network commands
-- Prevents device saturation and CPU overload on switches/routers
-- Protects against anti-DoS mechanisms on network equipment
-
-### 🔒 Security Improvements
-
-- **Timeout handling**: Now raises `TimeoutError` instead of silently returning incomplete buffers
-  - Critical fix: prevents saving truncated configs that could cause outages during restore
-  - Affects `read_until_prompt` in network device operations
-
-### 🛠️ Code Quality
-
-- **Magic numbers eliminated**: `width=220, height=50` replaced with named constants
-  - `DEFAULT_SHELL_WIDTH = 220`
-  - `DEFAULT_SHELL_HEIGHT = 50`
-- Better error messages with actionable hints
-- Improved logging for timeout events
-
-### 📚 Documentation
-
-- New `CLAUDE_CODE_USAGE.md` with complete usage examples
-- Updated `README.md` with quick start guide
-- Added examples for all device types (Cisco, MikroTik, FortiGate, Juniper)
-- Pre-mortem analysis and risk assessment included
-
-### 🧪 Testing
-
-- All existing tests pass (secret migration, autoconnect)
-- Rate limiter tested in production scenarios
-- Timeout handling verified
-
-### ⚠️ Breaking Changes
-
-- `ssh_connect` now requires only `alias` (was: `alias`, `host`, `username`)
-- Timeout errors now raise exceptions instead of returning partial data
-- This is a **good** breaking change for safety
+- **Smart Connection Mode**: `ssh_connect` accepts alias to load credentials from `servers.json` automatically.
+- **Rate Limiting**: 100ms minimum interval between network commands.
+- **Timeout handling**: Raises `TimeoutError` instead of returning incomplete buffers.
+- **Code Quality**: Named constants for shell dimensions.
+- **Documentation**: New usage and configuration guides.
 
 ---
 
-## [3.0.0] - Previous Release
+## [3.0.0] - Initial Release
 
-### Features
-- 18 MCP tools for SSH management
-- Support for Linux/Unix and network devices
-- Secure credential storage via Windows Credential Manager
-- SFTP support
-- SSH tunnels
-- Config backup/restore/diff for network devices
-
-### Security
-- Secrets moved to Windows Credential Manager
-- Automatic migration of plaintext credentials
-- Strict host key verification by default
-- Per-connection locking for thread safety
-
----
-
-## Migration Guide: 3.0 → 4.0
-
-### For Users
-
-**Before (v3.0):**
-```python
-ssh_connect(
-    alias='vps',
-    host='192.168.10.1',
-    username='admin',
-    password='secret'
-)
-```
-
-**After (v4.0):**
-```python
-# First time: save the server
-ssh_save_server(
-    alias='vps',
-    host='192.168.10.1',
-    username='admin',
-    password='secret',
-    auto_connect=True
-)
-
-# Every time after: just use the alias
-ssh_connect(alias='vps')
-```
-
-### For Developers
-
-**Timeout handling:**
-```python
-# Before: returned incomplete buffer silently
-buf = read_until_prompt(...)  # Could be truncated
-
-# After: raises exception
-try:
-    buf = read_until_prompt(...)
-except TimeoutError as e:
-    log.error(f"Timeout: {e}")
-    # Handle properly
-```
-
-**Rate limiting:**
-- Network commands now have automatic 100ms spacing
-- No code changes needed, it's transparent
-- Configurable via `self._min_cmd_interval` if needed
-
----
-
-## Roadmap
-
-### v4.1 (Next)
-- [ ] Jump host / bastion support (`proxy_jump` parameter)
-- [ ] Configurable `max_total_timeout` per device type
-- [ ] Log rotation (RotatingFileHandler)
-- [ ] Cross-platform keyring fallback (for non-Windows)
-
-### v4.2 (Future)
-- [ ] Integration tests with GNS3/EVE-NG
-- [ ] Support for FIDO2/U2F SSH keys
-- [ ] Async tunnels (trio/anyio) for better performance
-- [ ] Prometheus metrics export
-
-### v5.0 (Long-term)
-- [ ] Multi-hop SSH (PC → bastion → device)
-- [ ] Session recording and playback
-- [ ] Ansible-style inventory support
-- [ ] Web UI for connection management
-
----
-
-## Known Issues
-
-### Non-Critical
-- Windows Credential Manager corruption (rare) has no fallback
-  - Workaround: Re-save servers with `ssh_save_server`
-- Very long device outputs (>10MB) may cause memory issues
-  - Workaround: Use `ssh_download` to fetch large files instead
-
-### Won't Fix
-- Paramiko doesn't support FIDO2/U2F keys (upstream limitation)
-- Interactive commands (like `top`, `vim`) not supported (MCP design limitation)
-
----
-
-## Contributors
-
-- Initial implementation: Stéphane A.
-- Security review: Claude (Opus 4.7)
-- Testing: Production NetOps team
+- Core MCP tools for SSH management.
+- Linux/Unix and network device support.
+- Secure credential storage via Windows Credential Manager.
+- SFTP support and port forwarding tunnels.
 
 ---
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License
