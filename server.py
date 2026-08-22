@@ -1120,5 +1120,9 @@ async def main():
     async with stdio_server() as (read, write):
         await server.run(read, write, server.create_initialization_options())
 
-if __name__ == "__main__":
+def cli():
+    """Point d'entrée pour la commande de console `ssh-mcp`."""
     asyncio.run(main())
+
+if __name__ == "__main__":
+    cli()

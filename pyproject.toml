@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ssh-mcp"
+version = "5.0.0"
+description = "Universal NetOps & Pentest SSH MCP server for AI coding assistants"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Stephane" }
+]
+keywords = [
+    "mcp",
+    "ssh",
+    "netops",
+    "cisco",
+    "mikrotik",
+    "fortigate",
+    "juniper",
+    "pentest",
+    "socks5",
+    "sftp",
+    "ai",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking",
+    "Topic :: Security",
+]
+dependencies = [
+    "paramiko>=3.0.0",
+    "mcp>=1.0.0",
+    "pywin32>=306; sys_platform == 'win32'",
+    "keyring>=24.0.0; sys_platform != 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.scripts]
+ssh-mcp = "server:cli"
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "server.py",
+    "ssh_manager.py",
+    "secret_store.py",
+    "README.md",
+]

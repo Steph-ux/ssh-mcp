@@ -1,19 +1,48 @@
-# Configuration ssh-mcp pour Claude Code
+# Configuration ssh-mcp pour Clients MCP (Claude Code, OpenCode, Cursor, Windsurf, Claude Desktop)
 
 ## Installation
 
-### 1. Ajouter ssh-mcp à la configuration Claude Code
+### Option 1 : Via `uvx` (Recommandé — Zéro installation préalable)
 
-Édite ton fichier de configuration Claude Code (généralement `~/.config/claude/config.json` ou via les settings de l'app) :
+Ajoute dans ton fichier de configuration MCP :
+
+```json
+{
+  "mcpServers": {
+    "ssh-mcp": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/Steph-ux/ssh-mcp.git", "ssh-mcp"]
+    }
+  }
+}
+```
+
+### Option 2 : Via `pip install`
+
+```bash
+pip install git+https://github.com/Steph-ux/ssh-mcp.git
+```
+
+Puis dans ton fichier de configuration MCP :
+
+```json
+{
+  "mcpServers": {
+    "ssh-mcp": {
+      "command": "ssh-mcp"
+    }
+  }
+}
+```
+
+### Option 3 : En local (mode source / développement)
 
 ```json
 {
   "mcpServers": {
     "ssh-mcp": {
       "command": "python",
-      "args": ["D:\\Steph\\script\\ssh-mcp\\server.py"],
-      "env": {},
-      "disabled": false
+      "args": ["D:\\Steph\\script\\ssh-mcp\\server.py"]
     }
   }
 }

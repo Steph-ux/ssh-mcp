@@ -181,37 +181,66 @@ See [CLAUDE_CODE_USAGE.md](CLAUDE_CODE_USAGE.md) for detailed examples.
 - `start_socks` / `stop_socks` - Dynamic SOCKS5 proxy server
 - `list` - List active tunnels and proxies
 
+## Installation in MCP Clients (Claude Desktop, OpenCode, Cursor, Windsurf)
+
+### 🚀 Option 1: `uvx` (Instant — No Installation Required)
+
+Add directly to your MCP client configuration (`claude_desktop_config.json`, `opencode.json`, etc.):
+
+```json
+{
+  "mcpServers": {
+    "ssh-mcp": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/Steph-ux/ssh-mcp.git", "ssh-mcp"]
+    }
+  }
+}
+```
+
+### 📦 Option 2: `pip install`
+
+```bash
+pip install git+https://github.com/Steph-ux/ssh-mcp.git
+```
+
+Then in your MCP config:
+```json
+{
+  "mcpServers": {
+    "ssh-mcp": {
+      "command": "ssh-mcp"
+    }
+  }
+}
+```
+
+### 💻 Option 3: Local Clone (Development)
+
+```bash
+git clone https://github.com/Steph-ux/ssh-mcp.git
+cd ssh-mcp
+pip install -e .
+```
+
 ## Architecture
 
-- **SSHPool**: Thread-safe connection pool with automatic reconnection
+- **SSHPool**: Thread-safe connection pool with automatic reconnection and jump host chaining
 - **SSHConnection**: Per-connection state with RLock for thread safety
-- **ThreadPoolExecutor**: Async/await wrapper for Paramiko (which is synchronous)
+- **ThreadPoolExecutor**: Async/await wrapper for Paramiko
 - **Rate limiter**: 100ms minimum between commands to prevent device saturation
-- **Timeout handling**: Multiple levels (per-command, total, absolute) with proper error propagation
-
-## Requirements
-
-```
-paramiko>=3.0.0
-mcp>=1.0.0
-pywin32>=306
-```
-
-Install with:
-```bash
-pip install -r requirements.txt
-```
+- **SecretStore**: Windows Credential Manager on Windows, keyring on Linux/macOS
 
 ## Run Tests
 
-```powershell
-python -m pytest tests -v
+```bash
+pytest tests
 ```
 
 ## Documentation
 
-- [CLAUDE_CODE_USAGE.md](CLAUDE_CODE_USAGE.md) - Usage examples for Claude Code
-- [CLAUDE_CODE_SETUP.md](CLAUDE_CODE_SETUP.md) - Configuration guide
+- [CLAUDE_CODE_USAGE.md](CLAUDE_CODE_USAGE.md) - Usage examples for AI agents
+- [CLAUDE_CODE_SETUP.md](CLAUDE_CODE_SETUP.md) - Complete client configuration guide
 - [CHANGELOG.md](CHANGELOG.md) - Version history and migration guide
 
 ## License
