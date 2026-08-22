@@ -1,27 +1,27 @@
-# ssh-mcp v4.0
+# ssh-mcp v5.0
 
-MCP server for persistent SSH work across Linux hosts and network devices.
+Unified MCP server for persistent SSH work across Linux hosts, network devices, and offensive pentest environments.
 
-## Features
+## Features (7 Unified Tools)
 
-- **Persistent SSH connections** with automatic reconnection
-- **Secure credential storage** via Windows Credential Manager
-- **Network device support**: Cisco IOS/IOS-XE/XR, MikroTik, FortiGate, Juniper
-- **Config management**: backup, restore, diff for network devices
-- **SFTP**: upload, download, list remote files
-- **SSH tunnels**: persistent port forwarding
-- **Rate limiting**: prevents device saturation (100ms minimum between commands)
-- **Smart connection**: use `ssh_connect(alias='vps')` to load saved credentials automatically
+- **`ssh_session`**: Persistent SSH connections (connect/disconnect/list), jump hosts (bastions), zlib compression, proactive keepalive
+- **`ssh_server`**: Credential-safe server inventory management (save/remove/list) via Windows Credential Manager
+- **`ssh_exec`**: Unified shell execution (standard sync, sudo with automated prompt detection & secret masking, background job dispatching)
+- **`ssh_job`**: Background job supervision (status, realtime log streaming tail, kill)
+- **`ssh_sftp`**: File & recursive directory transfers (upload, download, upload_dir, download_dir, list) with configurable timeouts
+- **`ssh_network`**: Network automation for Cisco, MikroTik, FortiGate, Juniper (interactive exec, config push, backup, safe dry-run restore, diff)
+- **`ssh_tunnel`**: TCP port forwarding and dynamic SOCKS5 proxy server
 
 ## Quick Start
 
 ### 1. Save a server (once)
 
 ```python
-ssh_save_server(
+ssh_server(
+    action='save',
     alias='vps',
     host='192.168.10.1',
-    username='sassogba',
+    username='admin',
     password='your-password',
     auto_connect=True  # Auto-connect on startup
 )
@@ -30,14 +30,25 @@ ssh_save_server(
 ### 2. Connect (simple mode)
 
 ```python
-ssh_connect(alias='vps')  # Loads credentials from servers.json
+ssh_session(action='connect', alias='vps')  # Loads credentials automatically
 ```
 
 ### 3. Execute commands
 
 ```python
 ssh_exec(alias='vps', command='df -h')
-ssh_exec_sudo(alias='vps', command='systemctl restart nginx', sudo_password='...')
+ssh_exec(alias='vps', command='systemctl restart nginx', sudo_password='...')
+ssh_exec(alias='vps', command='nmap -sS -p- 10.0.0.0/24', background=True, label='full-scan')
+```
+
+### 4. SFTP & SOCKS5 Proxy
+
+```python
+# Recursive download without manual zip:
+ssh_sftp(action='download_dir', alias='vps', remote_path='/home/user/app', local_path='D:\\home\\app')
+
+# Dynamic SOCKS5 proxy on port 1080:
+ssh_tunnel(action='start_socks', alias='vps', label='socks-vps', local_port=1080)
 ```
 
 ## What's New in v4.0
@@ -125,43 +136,50 @@ interface GigabitEthernet0/1
 See [CLAUDE_CODE_USAGE.md](CLAUDE_CODE_USAGE.md) for detailed examples.
 
 **TL;DR:**
-```
-1. Save: ssh_save_server(alias='vps', host='192.168.10.1', username='sassogba', password='...')
-2. Connect: ssh_connect(alias='vps')
+```python
+1. Save: ssh_server(action='save', alias='vps', host='192.168.10.1', username='admin', password='...')
+2. Connect: ssh_session(action='connect', alias='vps')
 3. Execute: ssh_exec(alias='vps', command='df -h')
 ```
 
-## 18 Tools Available
+## 7 Unified Tools
 
-### Connection Management
-- `ssh_connect` - Establish persistent SSH connection (smart mode: just provide alias)
-- `ssh_disconnect` - Close connection and tunnels
-- `ssh_list` - List active connections with status
+### 1. `ssh_session`
+- `connect` - Establish or reuse persistent SSH connection (smart mode: just provide alias)
+- `disconnect` - Close connection, tunnels, SOCKS proxies, and jobs
+- `list` - List all active connections with uptime, tunnels, proxies, and background jobs
 
-### Persistent Configuration
-- `ssh_save_server` - Save server to servers.json (secrets in Credential Manager)
-- `ssh_remove_server` - Remove saved server
-- `ssh_list_servers` - List all saved servers
+### 2. `ssh_server`
+- `save` - Save/update server in `servers.json` (secrets securely kept in Credential Manager)
+- `remove` - Delete server from inventory
+- `list` - List all saved servers
 
-### Linux/Unix Execution
-- `ssh_exec` - Execute shell command
-- `ssh_exec_sudo` - Execute with sudo (auto password injection)
+### 3. `ssh_exec`
+- Standard sync execution (`command`)
+- Sudo execution with prompt detection (`sudo_password`)
+- Background execution (`background=True`, `label='...'`)
 
-### Network Device Execution
-- `ssh_exec_network` - Execute commands on network devices (handles pagination, prompts)
-- `ssh_push_config` - Deploy configuration block
-- `ssh_backup_config` - Backup running config to local file
-- `ssh_restore_config` - Restore config from backup file
-- `ssh_diff_config` - Compare configs (git-style diff)
+### 4. `ssh_job`
+- `status` - Check background job status or list all jobs
+- `tail` - Stream last N lines of stdout/stderr
+- `kill` - Terminate running background job
 
-### SFTP
-- `ssh_upload` - Upload file to remote server
-- `ssh_download` - Download file from remote server
-- `ssh_list_remote` - List remote directory contents
+### 5. `ssh_sftp`
+- `upload` / `download` - Transfer single files with configurable timeout
+- `upload_dir` / `download_dir` - Recursive directory transfers without manual zip
+- `list` - List remote files and directories
 
-### Tunnels
-- `ssh_tunnel` - Create persistent SSH tunnel (port forwarding)
-- `ssh_close_tunnel` - Close tunnel by label
+### 6. `ssh_network`
+- `exec` - Run sequence of interactive commands on network devices
+- `push` - Push multiline configuration block (with auto-backup)
+- `backup` - Backup running config to timestamped local file
+- `restore` - Restore config (dry-run by default, confirm=True to apply)
+- `diff` - Compare two configs or current config vs backup
+
+### 7. `ssh_tunnel`
+- `start` / `stop` - Persistent local port forwarding (TCP tunnels)
+- `start_socks` / `stop_socks` - Dynamic SOCKS5 proxy server
+- `list` - List active tunnels and proxies
 
 ## Architecture
 

@@ -13,10 +13,10 @@
 ### 1. Sauvegarder un serveur (une seule fois)
 
 ```
-Utilise ssh_save_server pour sauvegarder mon VPS :
+Utilise ssh_server(action='save') pour sauvegarder mon VPS :
 - alias: vps
 - host: 192.168.10.1
-- username: sassogba
+- username: admin
 - password: [ton mot de passe]
 - device_type: generic
 - auto_connect: true
@@ -28,12 +28,12 @@ Les credentials sont stockés de manière sécurisée dans Windows Credential Ma
 
 **Méthode simple (recommandée) :**
 ```
-Connecte-toi à mon VPS avec ssh_connect(alias='vps')
+Connecte-toi à mon VPS avec ssh_session(action='connect', alias='vps')
 ```
 
 **Méthode complète (pour un nouveau serveur) :**
 ```
-Connecte-toi à 192.168.10.1 avec ssh_connect(alias='vps', host='192.168.10.1', username='sassogba', password='...')
+Connecte-toi à 192.168.10.1 avec ssh_session(action='connect', alias='vps', host='192.168.10.1', username='admin', password='...')
 ```
 
 ### 3. Exécuter des commandes

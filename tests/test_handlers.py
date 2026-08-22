@@ -128,8 +128,8 @@ def test_restore_with_confirm_sends_only_clean_lines(isolated, monkeypatch, tmp_
 # ── MCP Protocol : call_tool safety & robust return types ────────
 
 
-def test_all_18_tools_return_valid_text_content_on_empty_args(isolated):
-    assert len(server.TOOLS) == 18
+def test_all_tools_return_valid_text_content_on_empty_args(isolated):
+    assert len(server.TOOLS) == 7
     for t in server.TOOLS:
         res = asyncio.run(server.call_tool(t.name, {}))
         assert isinstance(res, list), f"{t.name} did not return a list"
@@ -140,7 +140,7 @@ def test_all_18_tools_return_valid_text_content_on_empty_args(isolated):
         assert len(item.text) > 0, f"{t.name} text is empty"
 
 
-def test_all_18_tools_return_valid_text_content_on_none_args(isolated):
+def test_all_tools_return_valid_text_content_on_none_args(isolated):
     for t in server.TOOLS:
         res = asyncio.run(server.call_tool(t.name, None))
         assert isinstance(res, list)
@@ -149,6 +149,45 @@ def test_all_18_tools_return_valid_text_content_on_none_args(isolated):
         assert item.type == "text"
         assert isinstance(item.text, str)
         assert len(item.text) > 0
+
+
+def test_unified_handlers_and_legacy_compatibility(isolated, monkeypatch):
+    captured = []
+
+    class FakePool:
+        async def connect(self, **kwargs):
+            captured.append(("connect", kwargs))
+            return "connected"
+
+        async def upload(self, *args, **kwargs):
+            captured.append(("upload", args, kwargs))
+            return {"ok": True, "size": 1024}
+
+        async def start_socks(self, alias, label, local_port=1080):
+            captured.append(("start_socks", alias, label, local_port))
+            return {"ok": True, "local_port": local_port}
+
+    monkeypatch.setattr(server, "get_ssh_pool", lambda: FakePool())
+
+    # 1. Unified call
+    res1 = call("ssh_session", action="connect", alias="vps", host="1.1.1.1", username="root")
+    assert "SSH connecté" in res1
+    assert captured[0][0] == "connect"
+
+    # 2. Legacy call mapped to unified
+    res2 = call("ssh_connect", alias="vps2", host="2.2.2.2", username="root")
+    assert "SSH connecté" in res2
+    assert captured[1][0] == "connect"
+
+    # 3. SFTP unified vs legacy
+    call("ssh_sftp", action="upload", alias="vps", local_path="a", remote_path="b")
+    call("ssh_upload", alias="vps", local_path="a", remote_path="b")
+    assert len([c for c in captured if c[0] == "upload"]) == 2
+
+    # 4. SOCKS5 unified vs legacy
+    call("ssh_tunnel", action="start_socks", alias="vps", label="p1", local_port=1080)
+    call("ssh_socks", alias="vps", label="p2", local_port=1081)
+    assert len([c for c in captured if c[0] == "start_socks"]) == 2
 
 
 def test_unknown_tool_returns_clean_error_text_content():

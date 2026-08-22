@@ -5,12 +5,15 @@ SSH Manager v4.0 - persistent SSH connections via Paramiko.
 from __future__ import annotations
 
 import asyncio
+import collections
 import logging
 import os
 import re
 import socket
+import stat as stat_module
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 log = logging.getLogger("ssh-manager")
@@ -200,6 +203,10 @@ class SSHConnection:
         timeout=15,
         host_key_policy="strict",
         known_hosts_path=None,
+        jump_alias=None,
+        sock=None,
+        compress=True,
+        keepalive_interval=30,
     ):
         self.alias = alias
         self.host = host
@@ -211,11 +218,17 @@ class SSHConnection:
         self.timeout = timeout
         self.host_key_policy = host_key_policy or "strict"
         self.known_hosts_path = known_hosts_path
+        self.jump_alias = jump_alias
+        self.sock = sock
+        self.compress = compress
+        self.keepalive_interval = keepalive_interval
         self.connected_at = None
         self.last_used_at = None
         self._client = None
         self._sftp = None
         self._tunnels = {}
+        self._socks = {}
+        self._jobs = {}
         self._op_lock = threading.RLock()
         self._last_cmd_time = 0
         self._min_cmd_interval = 0.1  # 100ms minimum entre commandes réseau
@@ -253,7 +266,10 @@ class SSHConnection:
                 "timeout": self.timeout,
                 "allow_agent": True,
                 "look_for_keys": True,
+                "compress": self.compress,
             }
+            if self.sock:
+                kwargs["sock"] = self.sock
 
             if self.key_path:
                 expanded = os.path.expandvars(os.path.expanduser(self.key_path))
@@ -297,9 +313,9 @@ class SSHConnection:
             client.connect(**kwargs)
             self._client = client
             transport = client.get_transport()
-            if transport:
+            if transport and self.keepalive_interval:
                 # Evite la majorite des reconnexions dues aux coupures NAT/idle.
-                transport.set_keepalive(30)
+                transport.set_keepalive(self.keepalive_interval)
             self.connected_at = self.last_used_at = time.time()
 
             try:
@@ -698,25 +714,133 @@ class SSHConnection:
             self._sftp = self._client.open_sftp()
         return self._sftp
 
-    def upload(self, local_path: str, remote_path: str) -> dict:
+    def upload(self, local_path: str, remote_path: str, timeout: int = 60) -> dict:
         with self._op_lock:
             local_path = os.path.expandvars(os.path.expanduser(local_path))
             if not os.path.exists(local_path):
                 return {"ok": False, "error": f"Fichier introuvable: {local_path}"}
             try:
-                self._get_sftp().put(local_path, remote_path)
+                sftp = self._get_sftp()
+                if timeout:
+                    try:
+                        sftp.get_channel().settimeout(timeout)
+                    except Exception:
+                        pass
+                sftp.put(local_path, remote_path)
                 return {"ok": True, "size": os.path.getsize(local_path)}
             except Exception as exc:
                 self._sftp = None
                 return {"ok": False, "error": str(exc)}
 
-    def download(self, remote_path: str, local_path: str) -> dict:
+    def download(self, remote_path: str, local_path: str, timeout: int = 60) -> dict:
         with self._op_lock:
             local_path = os.path.expandvars(os.path.expanduser(local_path))
             os.makedirs(os.path.dirname(os.path.abspath(local_path)), exist_ok=True)
             try:
-                self._get_sftp().get(remote_path, local_path)
+                sftp = self._get_sftp()
+                if timeout:
+                    try:
+                        sftp.get_channel().settimeout(timeout)
+                    except Exception:
+                        pass
+                sftp.get(remote_path, local_path)
                 return {"ok": True, "size": os.path.getsize(local_path)}
+            except Exception as exc:
+                self._sftp = None
+                return {"ok": False, "error": str(exc)}
+
+    def _sftp_mkdir_p(self, sftp, remote_dir: str):
+        parts = remote_dir.replace("\\", "/").split("/")
+        current = ""
+        for p in parts:
+            if not p and current == "":
+                current = "/"
+                continue
+            if not p:
+                continue
+            current = current.rstrip("/") + "/" + p
+            try:
+                sftp.stat(current)
+            except Exception:
+                try:
+                    sftp.mkdir(current)
+                except Exception:
+                    pass
+
+    def upload_dir(self, local_path: str, remote_path: str, timeout: int = 120) -> dict:
+        with self._op_lock:
+            local_path = os.path.expandvars(os.path.expanduser(local_path))
+            if not os.path.isdir(local_path):
+                return {"ok": False, "error": f"Dossier local introuvable: {local_path}"}
+            try:
+                sftp = self._get_sftp()
+                if timeout:
+                    try:
+                        sftp.get_channel().settimeout(timeout)
+                    except Exception:
+                        pass
+                remote_base = remote_path.replace("\\", "/").rstrip("/")
+                self._sftp_mkdir_p(sftp, remote_base)
+
+                total_files = 0
+                total_bytes = 0
+                for root, _, files in os.walk(local_path):
+                    rel_dir = os.path.relpath(root, local_path).replace("\\", "/")
+                    target_dir = remote_base if rel_dir == "." else f"{remote_base}/{rel_dir}"
+                    self._sftp_mkdir_p(sftp, target_dir)
+                    for f in files:
+                        local_file = os.path.join(root, f)
+                        remote_file = f"{target_dir}/{f}"
+                        sftp.put(local_file, remote_file)
+                        total_files += 1
+                        total_bytes += os.path.getsize(local_file)
+
+                return {
+                    "ok": True,
+                    "files_count": total_files,
+                    "total_size": total_bytes,
+                    "remote_path": remote_base,
+                }
+            except Exception as exc:
+                self._sftp = None
+                return {"ok": False, "error": str(exc)}
+
+    def download_dir(self, remote_path: str, local_path: str, timeout: int = 120) -> dict:
+        with self._op_lock:
+            local_path = os.path.expandvars(os.path.expanduser(local_path))
+            try:
+                sftp = self._get_sftp()
+                if timeout:
+                    try:
+                        sftp.get_channel().settimeout(timeout)
+                    except Exception:
+                        pass
+                remote_base = remote_path.replace("\\", "/").rstrip("/")
+                os.makedirs(local_path, exist_ok=True)
+
+                total_files = 0
+                total_bytes = 0
+
+                def _download_recursive(current_remote, current_local):
+                    nonlocal total_files, total_bytes
+                    os.makedirs(current_local, exist_ok=True)
+                    for item in sftp.listdir_attr(current_remote):
+                        r_item = f"{current_remote}/{item.filename}"
+                        l_item = os.path.join(current_local, item.filename)
+                        if stat_module.S_ISDIR(item.st_mode):
+                            _download_recursive(r_item, l_item)
+                        else:
+                            sftp.get(r_item, l_item)
+                            total_files += 1
+                            total_bytes += item.st_size
+
+                _download_recursive(remote_base, local_path)
+                return {
+                    "ok": True,
+                    "files_count": total_files,
+                    "total_size": total_bytes,
+                    "local_path": local_path,
+                }
             except Exception as exc:
                 self._sftp = None
                 return {"ok": False, "error": str(exc)}
@@ -727,8 +851,6 @@ class SSHConnection:
                 items = self._get_sftp().listdir_attr(remote_path)
                 result = []
                 for item in sorted(items, key=lambda value: value.filename):
-                    import stat as stat_module
-
                     result.append(
                         {
                             "name": item.filename,
@@ -840,11 +962,313 @@ class SSHConnection:
                 for label, tunnel in self._tunnels.items()
             ]
 
+    def start_socks(self, label: str, local_port: int = 1080) -> dict:
+        with self._op_lock:
+            if label in self._socks:
+                return {"ok": False, "error": f"SOCKS5 proxy '{label}' déjà actif"}
+            try:
+                self._ensure_alive()
+
+                server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                server_sock.bind(("127.0.0.1", local_port))
+                server_sock.listen(20)
+                server_sock.settimeout(1.0)
+                stop_event = threading.Event()
+
+                def socks_loop():
+                    while not stop_event.is_set():
+                        try:
+                            client_sock, _ = server_sock.accept()
+                        except socket.timeout:
+                            continue
+                        except Exception:
+                            break
+
+                        threading.Thread(
+                            target=self._handle_socks_client,
+                            args=(client_sock, stop_event),
+                            daemon=True,
+                        ).start()
+                    server_sock.close()
+
+                thread = threading.Thread(target=socks_loop, name=f"socks-{label}", daemon=True)
+                thread.start()
+                self._socks[label] = {
+                    "thread": thread,
+                    "stop_event": stop_event,
+                    "server_sock": server_sock,
+                    "local_port": local_port,
+                    "started_at": time.time(),
+                }
+                return {"ok": True, "local_port": local_port}
+            except Exception as exc:
+                return {"ok": False, "error": str(exc)}
+
+    def _handle_socks_client(self, client_sock: socket.socket, stop_event: threading.Event):
+        try:
+            client_sock.settimeout(10.0)
+            # 1. Handshake
+            header = client_sock.recv(2)
+            if not header or len(header) < 2 or header[0] != 0x05:
+                client_sock.close()
+                return
+            nmethods = header[1]
+            methods = client_sock.recv(nmethods)
+            if not methods:
+                client_sock.close()
+                return
+            # Reply NO AUTH (0x00)
+            client_sock.sendall(b"\x05\x00")
+
+            # 2. Request
+            req = client_sock.recv(4)
+            if not req or len(req) < 4 or req[0] != 0x05 or req[1] != 0x01:  # CMD 1 = CONNECT
+                client_sock.sendall(b"\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00")  # Command not supported
+                client_sock.close()
+                return
+
+            atyp = req[3]
+            if atyp == 0x01:  # IPv4
+                addr_bytes = client_sock.recv(4)
+                dest_host = socket.inet_ntoa(addr_bytes)
+            elif atyp == 0x03:  # Domain
+                dlen_byte = client_sock.recv(1)
+                if not dlen_byte:
+                    client_sock.close()
+                    return
+                dlen = dlen_byte[0]
+                dest_host = client_sock.recv(dlen).decode("latin-1")
+            elif atyp == 0x04:  # IPv6
+                addr_bytes = client_sock.recv(16)
+                dest_host = socket.inet_ntop(socket.AF_INET6, addr_bytes)
+            else:
+                client_sock.sendall(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00")  # ATYP not supported
+                client_sock.close()
+                return
+
+            port_bytes = client_sock.recv(2)
+            if not port_bytes or len(port_bytes) < 2:
+                client_sock.close()
+                return
+            dest_port = int.from_bytes(port_bytes, "big")
+
+            transport = self._client.get_transport() if self._client else None
+            if not transport or not transport.is_active():
+                client_sock.sendall(b"\x05\x01\x00\x01\x00\x00\x00\x00\x00\x00")  # General failure
+                client_sock.close()
+                return
+
+            try:
+                channel = transport.open_channel(
+                    "direct-tcpip",
+                    (dest_host, dest_port),
+                    client_sock.getpeername(),
+                )
+            except Exception:
+                client_sock.sendall(b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00")  # Connection refused
+                client_sock.close()
+                return
+
+            if channel is None:
+                client_sock.sendall(b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00")
+                client_sock.close()
+                return
+
+            # Success response
+            client_sock.sendall(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00")
+            client_sock.settimeout(None)
+
+            def forward(src, dst):
+                try:
+                    while not stop_event.is_set():
+                        data = src.recv(8192)
+                        if not data:
+                            break
+                        dst.sendall(data)
+                except Exception:
+                    pass
+                finally:
+                    for s in (src, dst):
+                        try:
+                            s.close()
+                        except Exception:
+                            pass
+
+            threading.Thread(target=forward, args=(client_sock, channel), daemon=True).start()
+            threading.Thread(target=forward, args=(channel, client_sock), daemon=True).start()
+        except Exception:
+            try:
+                client_sock.close()
+            except Exception:
+                pass
+
+    def stop_socks(self, label: str) -> bool:
+        with self._op_lock:
+            socks = self._socks.pop(label, None)
+            if not socks:
+                return False
+            try:
+                socks["stop_event"].set()
+                socks["server_sock"].close()
+            except Exception:
+                pass
+            return True
+
+    def list_socks(self) -> list:
+        with self._op_lock:
+            return [
+                {
+                    "label": label,
+                    "local_port": socks["local_port"],
+                    "alive": socks["thread"].is_alive(),
+                    "uptime_s": int(time.time() - socks["started_at"]),
+                }
+                for label, socks in self._socks.items()
+            ]
+
+    def exec_background(self, command: str, label: str = None) -> dict:
+        with self._op_lock:
+            self._ensure_alive()
+            job_id = f"job-{uuid.uuid4().hex[:8]}"
+            job_label = label or (command[:40] + ("..." if len(command) > 40 else ""))
+
+            job_info = {
+                "job_id": job_id,
+                "label": job_label,
+                "command": command,
+                "status": "running",
+                "started_at": time.time(),
+                "finished_at": None,
+                "exit_code": None,
+                "stdout_lines": collections.deque(maxlen=3000),
+                "stderr_lines": collections.deque(maxlen=1000),
+                "channel": None,
+                "stop_requested": False,
+            }
+            self._jobs[job_id] = job_info
+
+            def run_job():
+                try:
+                    stdin, stdout, stderr = self._client.exec_command(command, get_pty=False)
+                    channel = stdout.channel
+                    job_info["channel"] = channel
+
+                    def read_stream(stream, line_deque):
+                        buf = ""
+                        while True:
+                            chunk = stream.read(4096)
+                            if not chunk:
+                                if buf:
+                                    line_deque.append(buf)
+                                break
+                            text = chunk.decode(errors="replace")
+                            buf += text
+                            while "\n" in buf:
+                                line, buf = buf.split("\n", 1)
+                                line_deque.append(line)
+
+                    t_out = threading.Thread(target=read_stream, args=(stdout, job_info["stdout_lines"]), daemon=True)
+                    t_err = threading.Thread(target=read_stream, args=(stderr, job_info["stderr_lines"]), daemon=True)
+                    t_out.start()
+                    t_err.start()
+                    t_out.join()
+                    t_err.join()
+
+                    exit_code = channel.recv_exit_status()
+                    job_info["exit_code"] = exit_code
+                    job_info["status"] = "killed" if job_info["stop_requested"] else ("completed" if exit_code == 0 else "failed")
+                except Exception as exc:
+                    job_info["status"] = "failed"
+                    job_info["stderr_lines"].append(f"Job execution error: {exc}")
+                finally:
+                    job_info["finished_at"] = time.time()
+
+            t = threading.Thread(target=run_job, name=f"job-{job_id}", daemon=True)
+            t.start()
+            return {
+                "ok": True,
+                "job_id": job_id,
+                "label": job_label,
+                "status": "running",
+                "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(job_info["started_at"])),
+            }
+
+    def job_status(self, job_id: str = None):
+        with self._op_lock:
+            if job_id:
+                job = self._jobs.get(job_id)
+                if not job:
+                    return {"ok": False, "error": f"Job '{job_id}' introuvable"}
+                runtime = int((job["finished_at"] or time.time()) - job["started_at"])
+                return {
+                    "ok": True,
+                    "job_id": job["job_id"],
+                    "label": job["label"],
+                    "command": job["command"],
+                    "status": job["status"],
+                    "exit_code": job["exit_code"],
+                    "runtime_s": runtime,
+                    "stdout_count": len(job["stdout_lines"]),
+                    "stderr_count": len(job["stderr_lines"]),
+                }
+            result = []
+            for j in self._jobs.values():
+                runtime = int((j["finished_at"] or time.time()) - j["started_at"])
+                result.append({
+                    "job_id": j["job_id"],
+                    "label": j["label"],
+                    "status": j["status"],
+                    "exit_code": j["exit_code"],
+                    "runtime_s": runtime,
+                })
+            return result
+
+    def job_tail(self, job_id: str, lines: int = 50) -> dict:
+        with self._op_lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return {"ok": False, "error": f"Job '{job_id}' introuvable"}
+            stdout_slice = list(job["stdout_lines"])[-lines:]
+            stderr_slice = list(job["stderr_lines"])[-lines:]
+            runtime = int((job["finished_at"] or time.time()) - job["started_at"])
+            return {
+                "ok": True,
+                "job_id": job["job_id"],
+                "status": job["status"],
+                "exit_code": job["exit_code"],
+                "runtime_s": runtime,
+                "stdout": "\n".join(stdout_slice),
+                "stderr": "\n".join(stderr_slice),
+            }
+
+    def job_kill(self, job_id: str) -> dict:
+        with self._op_lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return {"ok": False, "error": f"Job '{job_id}' introuvable"}
+            if job["status"] not in ("running",):
+                return {"ok": False, "error": f"Job '{job_id}' n'est plus en cours ({job['status']})"}
+            job["stop_requested"] = True
+            if job.get("channel"):
+                try:
+                    job["channel"].close()
+                except Exception:
+                    pass
+            job["status"] = "killed"
+            job["finished_at"] = time.time()
+            return {"ok": True, "job_id": job_id, "status": "killed"}
+
     def disconnect(self, keep_tunnels: bool = False):
         with self._op_lock:
             if not keep_tunnels:
                 for label in list(self._tunnels):
                     self.stop_tunnel(label)
+                for label in list(self._socks):
+                    self.stop_socks(label)
+            for jid in list(self._jobs):
+                if self._jobs[jid]["status"] == "running":
+                    self.job_kill(jid)
             for obj in (self._sftp, self._client):
                 try:
                     if obj:
@@ -860,9 +1284,12 @@ class SSHConnection:
             uptime = int(time.time() - self.connected_at) if self.connected_at else 0
             last_use = int(time.time() - self.last_used_at) if self.last_used_at else 0
             state = "connected" if alive else "down"
+            jump = f" via [{self.jump_alias}]" if self.jump_alias else ""
+            running_jobs = sum(1 for j in self._jobs.values() if j["status"] == "running")
             return (
-                f"{state} [{self.alias}] {self.username}@{self.host}:{self.port} "
-                f"| uptime={uptime}s | last_used={last_use}s ago | tunnels={len(self._tunnels)}"
+                f"{state} [{self.alias}]{jump} {self.username}@{self.host}:{self.port} "
+                f"| uptime={uptime}s | last_used={last_use}s ago | tunnels={len(self._tunnels)} "
+                f"| socks={len(self._socks)} | jobs={running_jobs}"
             )
 
 
@@ -894,6 +1321,9 @@ class SSHPool:
         timeout=15,
         host_key_policy="strict",
         known_hosts_path=None,
+        jump_alias=None,
+        compress=True,
+        keepalive_interval=30,
     ) -> str:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
@@ -909,6 +1339,9 @@ class SSHPool:
             timeout,
             host_key_policy,
             known_hosts_path,
+            jump_alias,
+            compress,
+            keepalive_interval,
         )
 
     def _connect_sync(
@@ -923,6 +1356,9 @@ class SSHPool:
         timeout,
         host_key_policy,
         known_hosts_path,
+        jump_alias=None,
+        compress=True,
+        keepalive_interval=30,
     ) -> str:
         with self._lock:
             old_conn = self._conns.get(alias)
@@ -931,6 +1367,22 @@ class SSHPool:
                 old_conn.disconnect()
             except Exception:
                 pass
+
+        sock_channel = None
+        if jump_alias:
+            with self._lock:
+                jump_conn = self._conns.get(jump_alias)
+            if not jump_conn or not jump_conn.is_alive():
+                raise ConnectionError(
+                    f"Jump host '{jump_alias}' introuvable ou inactif dans le pool. "
+                    f"Connectez d'abord le jump host avec ssh_connect(alias='{jump_alias}', ...)"
+                )
+            transport = jump_conn._client.get_transport() if jump_conn._client else None
+            if not transport or not transport.is_active():
+                raise ConnectionError(f"Transport SSH du jump host '{jump_alias}' inactif")
+            sock_channel = transport.open_channel("direct-tcpip", (host, int(port)), ("127.0.0.1", 0))
+            if not sock_channel:
+                raise ConnectionError(f"Échec de l'ouverture du canal direct-tcpip via '{jump_alias}' vers {host}:{port}")
 
         conn = SSHConnection(
             alias=alias,
@@ -943,11 +1395,16 @@ class SSHPool:
             timeout=timeout,
             host_key_policy=host_key_policy,
             known_hosts_path=known_hosts_path,
+            jump_alias=jump_alias,
+            sock=sock_channel,
+            compress=compress,
+            keepalive_interval=keepalive_interval,
         )
         info = conn.connect()
         with self._lock:
             self._conns[alias] = conn
-        log.info("[SSH] %s -> %s@%s:%s connected", alias, username, host, port)
+        jump_str = f" via [{jump_alias}]" if jump_alias else ""
+        log.info("[SSH] %s%s -> %s@%s:%s connected", alias, jump_str, username, host, port)
         return info
 
     async def exec(self, alias, command, timeout=30, get_pty=False) -> dict:
@@ -988,13 +1445,21 @@ class SSHPool:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self._executor, self._get(alias).backup_config, device_type, timeout)
 
-    async def upload(self, alias, local_path, remote_path) -> dict:
+    async def upload(self, alias, local_path, remote_path, timeout=60) -> dict:
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self._executor, self._get(alias).upload, local_path, remote_path)
+        return await loop.run_in_executor(self._executor, self._get(alias).upload, local_path, remote_path, timeout)
 
-    async def download(self, alias, remote_path, local_path) -> dict:
+    async def download(self, alias, remote_path, local_path, timeout=60) -> dict:
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self._executor, self._get(alias).download, remote_path, local_path)
+        return await loop.run_in_executor(self._executor, self._get(alias).download, remote_path, local_path, timeout)
+
+    async def upload_dir(self, alias, local_path, remote_path, timeout=120) -> dict:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self._get(alias).upload_dir, local_path, remote_path, timeout)
+
+    async def download_dir(self, alias, remote_path, local_path, timeout=120) -> dict:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self._get(alias).download_dir, remote_path, local_path, timeout)
 
     async def list_remote(self, alias, remote_path=".") -> list:
         loop = asyncio.get_event_loop()
@@ -1015,6 +1480,30 @@ class SSHPool:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self._executor, self._get(alias).stop_tunnel, label)
 
+    async def start_socks(self, alias, label, local_port=1080) -> dict:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self._get(alias).start_socks, label, local_port)
+
+    async def stop_socks(self, alias, label) -> bool:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self._get(alias).stop_socks, label)
+
+    async def exec_background(self, alias, command, label=None) -> dict:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self._get(alias).exec_background, command, label)
+
+    async def job_status(self, alias, job_id=None):
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self._get(alias).job_status, job_id)
+
+    async def job_tail(self, alias, job_id, lines=50) -> dict:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self._get(alias).job_tail, job_id, lines)
+
+    async def job_kill(self, alias, job_id) -> dict:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self._get(alias).job_kill, job_id)
+
     async def disconnect(self, alias: str):
         with self._lock:
             conn = self._conns.pop(alias, None)
@@ -1031,6 +1520,12 @@ class SSHPool:
 
     def get_tunnels(self, alias) -> list:
         return self._get(alias).list_tunnels()
+
+    def get_socks(self, alias) -> list:
+        return self._get(alias).list_socks()
+
+    def get_jobs(self, alias) -> list:
+        return self._get(alias).job_status()
 
     def count(self) -> int:
         with self._lock:

@@ -1,5 +1,57 @@
 # Changelog
 
+## [5.0.0] - 2026-08-22
+
+### ⚡ Unification Architecture (26 ➔ 7 Outils MCP)
+
+- **Regroupement ergonomique & Économie de tokens (-70%)** :
+  - `ssh_session` : Connect, disconnect, pool listing (avec jump hosts, keepalive, zlib compression).
+  - `ssh_server` : Inventaire servers.json (save, remove, list).
+  - `ssh_exec` : Exécution shell unifiée (sync, sudo avec prompt detection, background jobs).
+  - `ssh_job` : Supervision background jobs (status, streaming tail, kill).
+  - `ssh_sftp` : Transferts de fichiers & dossiers (upload, download, upload_dir, download_dir, list).
+  - `ssh_network` : Automatisation NetOps (exec, push config, backup, restore dry-run/confirm, diff).
+  - `ssh_tunnel` : Tunnels port-forwarding et proxy dynamique SOCKS5.
+- **Rétrocompatibilité totale** : Tous les anciens noms d'outils (`ssh_connect`, `ssh_upload`, `ssh_exec_sudo`, etc.) continuent d'être routés de façon transparente.
+- **Suite de tests** : 28/28 tests unitaires passés avec succès.
+
+## [4.3.0] - 2026-08-22
+
+### 🚀 5 Major Improvements (NetOps & Pentest Architecture)
+
+1. **Transferts récursifs de dossiers (`ssh_upload_dir` / `ssh_download_dir`) & Timeouts SFTP** :
+   - Transfert complet d'arborescences de dossiers via SFTP sans nécessiter de zip manuel préalable.
+   - Timeout paramétrable (`timeout`) sur `ssh_upload`, `ssh_download`, `ssh_upload_dir` et `ssh_download_dir`.
+   - Création récursive transparente des répertoires distants (`mkdir -p` SFTP).
+
+2. **Proxy SOCKS5 Dynamique (`ssh_socks` / `ssh_close_socks`)** :
+   - Mini-serveur SOCKS5 RFC 1928 intégré démarré sur `127.0.0.1:local_port`.
+   - Supporte la négociation sans auth, résolution d'adresses IPv4 (`0x01`), noms de domaines (`0x03`) et IPv6 (`0x04`).
+   - Route l'ensemble du trafic d'un outil local (Burp Suite, curl, navigateur, scanner) à travers l'hôte SSH distant via des canaux `direct-tcpip`.
+
+3. **Support natif des Jump Hosts / Bastions (`jump_alias`)** :
+   - Paramètre `jump_alias` dans `ssh_connect` et `servers.json`.
+   - Chaînage transparent via les canaux `direct-tcpip` du transport SSH du bastion actif.
+   - Ordonnancement automatique lors de l'auto-connexion au démarrage (bastions connectés en premier).
+
+4. **Exécution asynchrone / Background Jobs (`ssh_exec_background`, `ssh_job_status`, `ssh_job_tail`, `ssh_job_kill`)** :
+   - Lancement de commandes longues en arrière-plan sans bloquer l'agent ou le client MCP.
+   - Capture en streaming mémoire bornée des flux `stdout` et `stderr`.
+   - Suivi d'état en temps réel, lecture des dernières lignes et arrêt à la demande.
+
+5. **Keepalive & Compression Transport** :
+   - Compression zlib (`compress=True`) activée par défaut pour accélérer les transferts SFTP.
+   - Envoi régulier de paquets keepalive (`keepalive_interval=30`) pour prévenir les déconnexions silencieuses dues aux firewalls ou NAT.
+
+### 🧪 Tests
+- Nouveau `tests/test_new_features.py` couvrant :
+  - Handshake et connexion SOCKS5
+  - Transferts récursifs de répertoires
+  - Cycle de vie des jobs en arrière-plan
+  - Chaînage Jump Host
+  - Options compression & keepalive
+- Suite complète : **27/27 tests réussis**.
+
 ## [4.2.1] - 2026-08-22
 
 ### 🛡️ Client Safety & MCP Protocol Compliance
@@ -134,7 +186,7 @@
 ssh_connect(
     alias='vps',
     host='192.168.10.1',
-    username='sassogba',
+    username='admin',
     password='secret'
 )
 ```
@@ -145,7 +197,7 @@ ssh_connect(
 ssh_save_server(
     alias='vps',
     host='192.168.10.1',
-    username='sassogba',
+    username='admin',
     password='secret',
     auto_connect=True
 )

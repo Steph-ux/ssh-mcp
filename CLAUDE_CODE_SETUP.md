@@ -39,10 +39,10 @@ Tu devrais voir `ssh-mcp` dans la liste.
 ### Première connexion (sauvegarder le serveur)
 
 ```
-Utilise ssh_save_server pour sauvegarder mon VPS :
+Utilise ssh_server(action='save') pour sauvegarder mon VPS :
 - alias: vps
 - host: 192.168.10.1
-- username: sassogba
+- username: admin
 - password: [ton mot de passe]
 - auto_connect: true
 ```
@@ -50,7 +50,7 @@ Utilise ssh_save_server pour sauvegarder mon VPS :
 ### Connexions suivantes (mode rapide)
 
 ```
-Connecte-toi à mon VPS avec ssh_connect(alias='vps')
+Connecte-toi à mon VPS avec ssh_session(action='connect', alias='vps')
 ```
 
 ### Exécuter des commandes
@@ -64,7 +64,7 @@ Exécute "systemctl restart nginx" avec sudo sur vps
 ```
 
 ```
-Liste les fichiers dans /var/log sur vps
+Liste les fichiers dans /var/log sur vps avec ssh_sftp(action='list', alias='vps', path='/var/log')
 ```
 
 ---
@@ -75,10 +75,10 @@ Liste les fichiers dans /var/log sur vps
 
 ```
 1. Sauvegarde mon serveur :
-   ssh_save_server(alias='vps', host='192.168.10.1', username='sassogba', password='...', auto_connect=true)
+   ssh_server(action='save', alias='vps', host='192.168.10.1', username='admin', password='...', auto_connect=true)
 
 2. Connecte-toi :
-   ssh_connect(alias='vps')
+   ssh_session(action='connect', alias='vps')
 
 3. Vérifie l'espace disque :
    ssh_exec(alias='vps', command='df -h')
@@ -87,7 +87,7 @@ Liste les fichiers dans /var/log sur vps
    ssh_exec(alias='vps', command='systemctl status nginx')
 
 5. Redémarre nginx avec sudo :
-   ssh_exec_sudo(alias='vps', command='systemctl restart nginx', sudo_password='...')
+   ssh_exec(alias='vps', command='systemctl restart nginx', sudo_password='...')
 ```
 
 ### Scénario 2 : Backup d'un switch Cisco
